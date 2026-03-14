@@ -6,6 +6,7 @@ class Ismpc:
 
   def __init__(self, initial, footstep_planner, params):
 
+    # parameters
     self.params = params
     self.N = params['N']
     self.delta = params['world_time_step']
@@ -85,6 +86,7 @@ class Ismpc:
     # -------------------------
 
     cost = cs.sumsqr(self.U)
+
     cost += 100 * cs.sumsqr(self.X[2, 1:].T - self.zmp_x_mid_param)
     cost += 100 * cs.sumsqr(self.X[5, 1:].T - self.zmp_y_mid_param)
     cost += 100 * cs.sumsqr(self.X[8, 1:].T - self.zmp_z_mid_param)
@@ -147,27 +149,19 @@ class Ismpc:
 
   # -------------------------------------------------
   # SWING FOOT MODEL
-  # allineato con FootTrajectoryGenerator:
-  #   x: cubico  -2/T^3 * t^3 + 3/T^2 * t^2
-  #   z: quartico 16h/T^4*t^4 - 32h/T^3*t^3 + 16h/T^2*t^2
   # -------------------------------------------------
 
   def swing_foot_model(self, phase_time, step_length):
 
-    T = self.params['ss_duration'] * self.delta
-    t = phase_time
+    tss = self.params['ss_duration'] * self.delta
 
-    # cubico per x (identico a FTG)
-    A_c = -2 / T**3
-    B_c =  3 / T**2
-    xm   = step_length * (    A_c * t**3 +     B_c * t**2)
+    p = np.clip(phase_time / tss, 0, 1)
 
-    # quartico per z (identico a FTG)
-    A_q =  16 * self.zm_max / T**4
-    B_q = -32 * self.zm_max / T**3
-    C_q =  16 * self.zm_max / T**2
-    zm   =       A_q * t**4 +     B_q * t**3 +     C_q * t**2
-    ddzm = 12 * A_q * t**2 + 6 * B_q * t    + 2 * C_q
+    xm = step_length * p
+
+    zm = -4 * self.zm_max * phase_time * (phase_time - tss) / (tss ** 2)
+
+    ddzm = -8 * self.zm_max / (tss ** 2)
 
     return xm, zm, ddzm
 
@@ -206,25 +200,20 @@ class Ismpc:
 
         step_idx = self.footstep_planner.get_step_index_at_time(t + i)
 
-        # guard: primo passo (no step_idx-1) o fine piano
-        if step_idx == 0 or step_idx + 1 >= len(self.footstep_planner.plan):
+        # guard: fine del piano
+        if step_idx + 1 >= len(self.footstep_planner.plan):
           sigma[i] = 0
           continue
 
-        phase_time = (t + i) - self.footstep_planner.get_start_time(step_idx)
-        phase_time = ((t + i) - self.footstep_planner.get_start_time(step_idx)) * self.delta
-        # posizione di partenza e arrivo del piede oscillante (come FTG)
-        swing_start_x = self.footstep_planner.plan[step_idx - 1]['pos'][0]
-        swing_start_y = self.footstep_planner.plan[step_idx - 1]['pos'][1]
-        swing_end_x   = self.footstep_planner.plan[step_idx + 1]['pos'][0]
-
-        step_length = swing_end_x - swing_start_x
+        phase_time  = (t + i) - self.footstep_planner.get_start_time(step_idx)
+        step_length = self.footstep_planner.plan[step_idx + 1]['pos'][0] \
+                    - self.footstep_planner.plan[step_idx]['pos'][0]
 
         xm, zm, ddzm = self.swing_foot_model(phase_time, step_length)
 
         # posizione assoluta del piede oscillante
-        swing_x[i] = swing_start_x + xm
-        swing_y[i] = swing_start_y
+        swing_x[i] = self.footstep_planner.plan[step_idx]['pos'][0] + xm
+        swing_y[i] = self.footstep_planner.plan[step_idx]['pos'][1]
 
         sigma[i] = np.clip(
             (self.m / self.M) * (ddzm + self.params['g']) / self.params['g'],
@@ -235,10 +224,10 @@ class Ismpc:
         sigma[i] = 0
 
     # set parameters
-    self.opt.set_value(self.x0_param,          self.x)
-    self.opt.set_value(self.zmp_x_mid_param,   mc_x)
-    self.opt.set_value(self.zmp_y_mid_param,   mc_y)
-    self.opt.set_value(self.zmp_z_mid_param,   mc_z)
+    self.opt.set_value(self.x0_param,        self.x)
+    self.opt.set_value(self.zmp_x_mid_param, mc_x)
+    self.opt.set_value(self.zmp_y_mid_param, mc_y)
+    self.opt.set_value(self.zmp_z_mid_param, mc_z)
     self.opt.set_value(self.zmp_x_swing_param, swing_x)
     self.opt.set_value(self.zmp_y_swing_param, swing_y)
     self.opt.set_value(self.sigma_param,       sigma)
@@ -263,6 +252,7 @@ class Ismpc:
     ) + np.array([0, 0, -self.params['g']])
 
     # ZMP totale predetto al tempo CORRENTE t (eq. 12 del paper)
+    # usa x_current (stato a t) e swing al primo step dell'orizzonte
     sigma0 = sigma[0]
     zmp_x_pred = (1 / (1 + sigma0)) * x_current[2] + (sigma0 / (1 + sigma0)) * swing_x[0]
     zmp_y_pred = (1 / (1 + sigma0)) * x_current[5] + (sigma0 / (1 + sigma0)) * swing_y[0]
@@ -284,17 +274,13 @@ class Ismpc:
   def generate_moving_constraint(self, t):
     mc_x = np.full(self.N, (self.initial['lfoot']['pos'][3] + self.initial['rfoot']['pos'][3]) / 2.)
     mc_y = np.full(self.N, (self.initial['lfoot']['pos'][4] + self.initial['rfoot']['pos'][4]) / 2.)
-    
-    plan = self.footstep_planner.plan
-    last_time = self.footstep_planner.get_start_time(len(plan) - 1)
-    time_array = np.clip(np.array(range(t, t + self.N)), 0, last_time)
-    
-    for j in range(len(plan) - 1):
-        fs_start_time  = self.footstep_planner.get_start_time(j)
-        ds_start_time  = fs_start_time + plan[j]['ss_duration']
-        fs_end_time    = ds_start_time + plan[j]['ds_duration']
-        fs_current_pos = plan[j]['pos'] if j > 0 else np.array([mc_x[0], mc_y[0]])
-        fs_target_pos  = plan[j + 1]['pos']
-        mc_x += self.sigma_fun(time_array, ds_start_time, fs_end_time) * (fs_target_pos[0] - fs_current_pos[0])
-        mc_y += self.sigma_fun(time_array, ds_start_time, fs_end_time) * (fs_target_pos[1] - fs_current_pos[1])
+    time_array = np.array(range(t, t + self.N))
+    for j in range(len(self.footstep_planner.plan) - 1):
+      fs_start_time  = self.footstep_planner.get_start_time(j)
+      ds_start_time  = fs_start_time + self.footstep_planner.plan[j]['ss_duration']
+      fs_end_time    = ds_start_time + self.footstep_planner.plan[j]['ds_duration']
+      fs_current_pos = self.footstep_planner.plan[j]['pos'] if j > 0 else np.array([mc_x[0], mc_y[0]])
+      fs_target_pos  = self.footstep_planner.plan[j + 1]['pos']
+      mc_x += self.sigma_fun(time_array, ds_start_time, fs_end_time) * (fs_target_pos[0] - fs_current_pos[0])
+      mc_y += self.sigma_fun(time_array, ds_start_time, fs_end_time) * (fs_target_pos[1] - fs_current_pos[1])
     return mc_x, mc_y, np.zeros(self.N)
