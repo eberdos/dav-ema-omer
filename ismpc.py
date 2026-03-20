@@ -92,7 +92,7 @@ class Ismpc:
     self.opt.minimize(cost)
 
     # -------------------------
-    # TWO MASS ZMP (eq. 12 del paper)
+    # TWO MASS ZMP (eq. 12)
     # -------------------------
 
     zmp_x_total = (1 / (1 + self.sigma_param)) * self.X[2, 1:].T \
@@ -147,9 +147,7 @@ class Ismpc:
 
   # -------------------------------------------------
   # SWING FOOT MODEL
-  # allineato con FootTrajectoryGenerator:
-  #   x: cubico  -2/T^3 * t^3 + 3/T^2 * t^2
-  #   z: quartico 16h/T^4*t^4 - 32h/T^3*t^3 + 16h/T^2*t^2
+  # aligned with FootTrajectoryGenerator: same cubic/polynomial use
   # -------------------------------------------------
 
   def swing_foot_model(self, phase_time, step_length):
@@ -157,16 +155,16 @@ class Ismpc:
     T = self.params['ss_duration'] * self.delta
     t = phase_time
 
-    # cubico per x (identico a FTG)
+    # cubic for x (same as FTG)
     A_c = -2 / T**3
     B_c =  3 / T**2
-    xm   = step_length * (    A_c * t**3 +     B_c * t**2)
+    xm   = step_length * (A_c * t**3 + B_c * t**2)
 
-    # quartico per z (identico a FTG)
+    # quartic for z (same as FTG)
     A_q =  16 * self.zm_max / T**4
     B_q = -32 * self.zm_max / T**3
     C_q =  16 * self.zm_max / T**2
-    zm   =       A_q * t**4 +     B_q * t**3 +     C_q * t**2
+    zm   =      A_q * t**4 +     B_q * t**3 +     C_q * t**2
     ddzm = 12 * A_q * t**2 + 6 * B_q * t    + 2 * C_q
 
     return xm, zm, ddzm
@@ -189,7 +187,6 @@ class Ismpc:
         current['zmp']['pos'][2]
     ])
 
-    # salva stato corrente (tempo t) prima di solve, serve per pos_total
     x_current = self.x.copy()
 
     mc_x, mc_y, mc_z = self.generate_moving_constraint(t)
@@ -206,23 +203,23 @@ class Ismpc:
 
         step_idx = self.footstep_planner.get_step_index_at_time(t + i)
 
-        # guard: primo passo (no step_idx-1) o fine piano
+        # guard: first/last step
         if step_idx == 0 or step_idx + 1 >= len(self.footstep_planner.plan):
           sigma[i] = 0
           continue
 
-        phase_time = (t + i) - self.footstep_planner.get_start_time(step_idx)
+        # phase_time in seconds (as FTG)
         phase_time = ((t + i) - self.footstep_planner.get_start_time(step_idx)) * self.delta
-        # posizione di partenza e arrivo del piede oscillante (come FTG)
+
+        # start+end position of the feet
         swing_start_x = self.footstep_planner.plan[step_idx - 1]['pos'][0]
         swing_start_y = self.footstep_planner.plan[step_idx - 1]['pos'][1]
         swing_end_x   = self.footstep_planner.plan[step_idx + 1]['pos'][0]
-
-        step_length = swing_end_x - swing_start_x
+        step_length   = swing_end_x - swing_start_x
 
         xm, zm, ddzm = self.swing_foot_model(phase_time, step_length)
 
-        # posizione assoluta del piede oscillante
+        # foot position
         swing_x[i] = swing_start_x + xm
         swing_y[i] = swing_start_y
 
@@ -262,7 +259,7 @@ class Ismpc:
         self.lip_state['com']['pos'] - self.lip_state['zmp']['pos']
     ) + np.array([0, 0, -self.params['g']])
 
-    # ZMP totale predetto al tempo CORRENTE t (eq. 12 del paper)
+    # predicted ZMP
     sigma0 = sigma[0]
     zmp_x_pred = (1 / (1 + sigma0)) * x_current[2] + (sigma0 / (1 + sigma0)) * swing_x[0]
     zmp_y_pred = (1 / (1 + sigma0)) * x_current[5] + (sigma0 / (1 + sigma0)) * swing_y[0]
@@ -284,17 +281,18 @@ class Ismpc:
   def generate_moving_constraint(self, t):
     mc_x = np.full(self.N, (self.initial['lfoot']['pos'][3] + self.initial['rfoot']['pos'][3]) / 2.)
     mc_y = np.full(self.N, (self.initial['lfoot']['pos'][4] + self.initial['rfoot']['pos'][4]) / 2.)
-    
+
     plan = self.footstep_planner.plan
     last_time = self.footstep_planner.get_start_time(len(plan) - 1)
     time_array = np.clip(np.array(range(t, t + self.N)), 0, last_time)
-    
+
     for j in range(len(plan) - 1):
-        fs_start_time  = self.footstep_planner.get_start_time(j)
-        ds_start_time  = fs_start_time + plan[j]['ss_duration']
-        fs_end_time    = ds_start_time + plan[j]['ds_duration']
-        fs_current_pos = plan[j]['pos'] if j > 0 else np.array([mc_x[0], mc_y[0]])
-        fs_target_pos  = plan[j + 1]['pos']
-        mc_x += self.sigma_fun(time_array, ds_start_time, fs_end_time) * (fs_target_pos[0] - fs_current_pos[0])
-        mc_y += self.sigma_fun(time_array, ds_start_time, fs_end_time) * (fs_target_pos[1] - fs_current_pos[1])
+      fs_start_time  = self.footstep_planner.get_start_time(j)
+      ds_start_time  = fs_start_time + plan[j]['ss_duration']
+      fs_end_time    = ds_start_time + plan[j]['ds_duration']
+      fs_current_pos = plan[j]['pos'] if j > 0 else np.array([mc_x[0], mc_y[0]])
+      fs_target_pos  = plan[j + 1]['pos']
+      mc_x += self.sigma_fun(time_array, ds_start_time, fs_end_time) * (fs_target_pos[0] - fs_current_pos[0])
+      mc_y += self.sigma_fun(time_array, ds_start_time, fs_end_time) * (fs_target_pos[1] - fs_current_pos[1])
+
     return mc_x, mc_y, np.zeros(self.N)

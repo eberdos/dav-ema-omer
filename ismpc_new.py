@@ -94,7 +94,7 @@ class Ismpc:
     self.opt.minimize(cost)
 
     # -------------------------
-    # TWO MASS ZMP (eq. 12 del paper)
+    # TWO MASS ZMP (eq. 12 paper)
     # -------------------------
 
     zmp_x_total = (1 / (1 + self.sigma_param)) * self.X[2, 1:].T \
@@ -183,7 +183,6 @@ class Ismpc:
         current['zmp']['pos'][2]
     ])
 
-    # salva stato corrente (tempo t) prima di solve, serve per pos_total
     x_current = self.x.copy()
 
     mc_x, mc_y, mc_z = self.generate_moving_constraint(t)
@@ -200,7 +199,6 @@ class Ismpc:
 
         step_idx = self.footstep_planner.get_step_index_at_time(t + i)
 
-        # guard: fine del piano
         if step_idx + 1 >= len(self.footstep_planner.plan):
           sigma[i] = 0
           continue
@@ -211,15 +209,21 @@ class Ismpc:
 
         xm, zm, ddzm = self.swing_foot_model(phase_time, step_length)
 
-        # posizione assoluta del piede oscillante
+        # foot position
         swing_x[i] = self.footstep_planner.plan[step_idx]['pos'][0] + xm
         swing_y[i] = self.footstep_planner.plan[step_idx]['pos'][1]
 
-        sigma[i] = np.clip(
-            (self.m / self.M) * (ddzm + self.params['g']) / self.params['g'],
-            0.0, 0.5
-        )
-
+        
+        # use sigma only in first part of swing (later maybe not needed, helps to avoid spikes)
+        T = self.params['ss_duration'] * self.delta
+        
+        if phase_time < 1*T+1:
+            sigma[i] = np.clip(
+                 (self.m / self.M) * (ddzm + self.params['g']) / self.params['g'],
+                 0.0, 0.5
+                )
+        else:
+            sigma[i] = 0.0
       else:
         sigma[i] = 0
 
@@ -251,8 +255,6 @@ class Ismpc:
         self.lip_state['com']['pos'] - self.lip_state['zmp']['pos']
     ) + np.array([0, 0, -self.params['g']])
 
-    # ZMP totale predetto al tempo CORRENTE t (eq. 12 del paper)
-    # usa x_current (stato a t) e swing al primo step dell'orizzonte
     sigma0 = sigma[0]
     zmp_x_pred = (1 / (1 + sigma0)) * x_current[2] + (sigma0 / (1 + sigma0)) * swing_x[0]
     zmp_y_pred = (1 / (1 + sigma0)) * x_current[5] + (sigma0 / (1 + sigma0)) * swing_y[0]

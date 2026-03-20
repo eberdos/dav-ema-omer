@@ -3,7 +3,7 @@ import dartpy as dart
 import copy
 from utils import *
 import os
-import ismpc
+import ismpc as ismpc
 import footstep_planner
 import inverse_dynamics as id
 import filter
@@ -33,8 +33,8 @@ class Hrp4Controller(dart.gui.osg.WorldNode):
         'N':               100,
         'dof':             self.hrp4.getNumDofs(),
         # two-mass parameters
-        'body_mass':       self.hrp4.getMass() * 0.8,
-        'swing_mass':      self.hrp4.getMass() * 0.2,
+        'body_mass':       self.hrp4.getMass() * 0.95,
+        'swing_mass':      self.hrp4.getMass() * 0.05,
         'swing_height':    0.02,
     }
     self.params['eta'] = np.sqrt(self.params['g'] / self.params['h'])
@@ -316,4 +316,6 @@ if __name__ == "__main__":
     i += 1
 
   print("yahu")
-  node.logger.save_plot(dt=world.getTimeStep(), filename='zmp_10.png')
+  np.save('zmp_meas.npy',         np.array(node.logger.log_zmp_measured_raw))
+  np.save('zmp_pred_twomass.npy', np.array(node.logger.log_zmp_total_predicted))
+  node.logger.save_plot(dt=world.getTimeStep(), filename='zmp_05.png')

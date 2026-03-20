@@ -74,7 +74,8 @@ class Logger():
     self.fig.canvas.draw()
     self.fig.canvas.flush_events()
 
-  def save_plot(self, dt, filename='zmp_0.png'):
+
+  def save_plot(self, dt, filename):
     from scipy.signal import medfilt
 
     zmp_pred = np.array(self.log_zmp_total_predicted)
@@ -83,7 +84,6 @@ class Logger():
     n = min(len(zmp_pred), len(zmp_meas))
     t = np.arange(n) * dt
 
-    # taglia i primi 2 secondi (robot che parte da fermo, misure instabili)
     skip = int(2.0 / dt)
 
     zmp_meas_x = medfilt(zmp_meas[:n, 0], kernel_size=51)

@@ -24,7 +24,7 @@ class Ismpc:
       self.A_lip @ x[3:6] + self.B_lip @ u[1],
       self.A_lip @ x[6:9] + self.B_lip @ u[2] + np.array([0, - params['g'], 0]),
     )
-
+    
     # optimization problem
     self.opt = cs.Opti('conic')
     p_opts = {"expand": True}
@@ -71,7 +71,7 @@ class Ismpc:
     # state
     self.x = np.zeros(9)
     self.lip_state = {'com': {'pos': np.zeros(3), 'vel': np.zeros(3), 'acc': np.zeros(3)},
-                      'zmp': {'pos': np.zeros(3), 'vel': np.zeros(3)}}
+                  'zmp': {'pos': np.zeros(3), 'vel': np.zeros(3), 'pos_total': np.zeros(3)}}
 
   def solve(self, current, t):
     self.x = np.array([current['com']['pos'][0], current['com']['vel'][0], current['zmp']['pos'][0],
@@ -99,7 +99,7 @@ class Ismpc:
     self.lip_state['zmp']['pos'] = np.array([self.x[2], self.x[5], self.x[8]])
     self.lip_state['zmp']['vel'] = self.u
     self.lip_state['com']['acc'] = self.eta**2 * (self.lip_state['com']['pos'] - self.lip_state['zmp']['pos']) + np.hstack([0, 0, - self.params['g']])
-
+    self.lip_state['zmp']['pos_total'] = self.lip_state['zmp']['pos'].copy()
     contact = self.footstep_planner.get_phase_at_time(t)
     if contact == 'ss':
       contact = self.footstep_planner.plan[self.footstep_planner.get_step_index_at_time(t)]['foot_id']
