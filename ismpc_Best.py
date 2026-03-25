@@ -1,3 +1,4 @@
+#ismpc2.py
 import numpy as np
 import casadi as cs
 
@@ -253,7 +254,7 @@ class Ismpc:
         # constant sigma for parabolic trajectory
         sigma[i] = np.clip(
             (self.m / self.M) * (ddzm + self.params['g']) / self.params['g'],
-            -30.0, 30.0
+            0, 1.0
         )
 
       else:

@@ -3,18 +3,10 @@ import dartpy as dart
 import copy
 from utils import *
 import os
-
-mode="Two_Mass" #enter here what you are using, use LIP, Two_Mass, Two_Mass_NoY for Y-LIP version
-if mode=='LIP':
-  import ismpc_LIP as ismpc
-elif mode=='Two_Mass':
-  import ismpc_Best as ismpc
-else:
-  import ismpc_YLIP as ismpc
-
-import footstep_planner
+import ismpc_filtered as ismpc
+import planner_filtered as footstep_planner
 import inverse_dynamics as id
-import filter
+import filter_filter as filter
 import foot_trajectory_generator as ftg
 from logger import Logger
 
@@ -44,13 +36,6 @@ class Hrp4Controller(dart.gui.osg.WorldNode):
         'body_mass':       self.hrp4.getMass() * 0.9,
         'swing_mass':      self.hrp4.getMass() * 0.1,
         'swing_height':    0.02,
-        # real time variables
-        'footstep_x_adapt': 0.05,
-        'footstep_y_adapt': 0.03,
-        'n_footstep_vars':        3,      # number of upcoming footstep variables
-        'footstep_x_adapt':       0.05,   # ±5 cm max footstep adaptation in x
-        'two_mass_cost_weight':   50.0,   # weight on two-mass cost (vs LIP cost=100)
-        'footstep_reg_weight':    50.0,   # weight pulling Xf back toward nominal plan
     }
     self.params['eta'] = np.sqrt(self.params['g'] / self.params['h'])
 
@@ -127,7 +112,7 @@ class Hrp4Controller(dart.gui.osg.WorldNode):
     B = self.params['world_time_step'] * self.mpc.B_lip
     d = np.zeros(9)
     d[7] = -self.params['world_time_step'] * self.params['g']
-    H = np.identity(3)
+    H = np.identity(9)
     Q = block_diag(1., 1., 1.)
     R = block_diag(1e1, 1e2, 1e4)
     P = np.identity(3)
@@ -140,7 +125,7 @@ class Hrp4Controller(dart.gui.osg.WorldNode):
         block_diag(A, A, A),
         block_diag(B, B, B),
         d,
-        block_diag(H, H, H),
+        H,
         block_diag(Q, Q, Q),
         block_diag(R, R, R),
         block_diag(P, P, P),
@@ -167,11 +152,13 @@ class Hrp4Controller(dart.gui.osg.WorldNode):
         self.desired['zmp']['vel'][2]
     ])
     self.kf.predict(u)
-    x_flt, _ = self.kf.update(np.array([
+    z_meas = np.array([
         self.current['com']['pos'][0], self.current['com']['vel'][0], self.current['zmp']['pos'][0],
         self.current['com']['pos'][1], self.current['com']['vel'][1], self.current['zmp']['pos'][1],
         self.current['com']['pos'][2], self.current['com']['vel'][2], self.current['zmp']['pos'][2]
-    ]))
+    ])
+    H_kf, c_kf = self.mpc.get_filter_measurement_model(self.time)
+    x_flt, _= self.kf.update(z_meas, H=H_kf,c=c_kf)
 
     # aggiorna stato con output Kalman
     self.current['com']['pos'][0] = x_flt[0]
@@ -324,21 +311,13 @@ if __name__ == "__main__":
   viewer.setCameraHomePosition([5., -1., 1.5], [1., 0., 0.5], [0., 0., 1.])
 
   i = 0
-  while i < 2500:
+  while i < 2400:
     node.customPreStep()
     world.step()
     viewer.frame()
     i += 1
 
   print("yahu")
-  if mode=="LIP":
-    np.save('zmp_meas_lip.npy', np.array(node.logger.log_zmp_measured_raw))
-    np.save('zmp_pred_lip.npy', np.array(node.logger.log_zmp_total_predicted))
-    node.logger.save_plot(dt=world.getTimeStep(), filename='zmp_lip.png')
-  else:
-    np.save('zmp_meas.npy',         np.array(node.logger.log_zmp_measured_raw))
-    np.save('zmp_pred_twomass.npy', np.array(node.logger.log_zmp_total_predicted))
-    swing_ratio = node.params['swing_mass'] / node.hrp4.getMass()
-    name = f'zmp_{int(swing_ratio * 100)}.png'
-    node.logger.save_plot(dt=world.getTimeStep(), filename=name)
-    
+  np.save('zmp_meas.npy',         np.array(node.logger.log_zmp_measured_raw))
+  np.save('zmp_pred_twomass.npy', np.array(node.logger.log_zmp_total_predicted))
+  node.logger.save_plot(dt=world.getTimeStep(), filename='zmp_10.png')

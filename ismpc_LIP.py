@@ -43,9 +43,9 @@ class Ismpc:
       self.opt.subject_to(self.X[:, i + 1] == self.X[:, i] + self.delta * self.f(self.X[:, i], self.U[:, i]))
 
     cost = cs.sumsqr(self.U) + \
-           100 * cs.sumsqr(self.X[2, 1:].T - self.zmp_x_mid_param) + \
-           100 * cs.sumsqr(self.X[5, 1:].T - self.zmp_y_mid_param) + \
-           100 * cs.sumsqr(self.X[8, 1:].T - self.zmp_z_mid_param)
+           200 * cs.sumsqr(self.X[2, 1:].T - self.zmp_x_mid_param) + \
+           200 * cs.sumsqr(self.X[5, 1:].T - self.zmp_y_mid_param) + \
+           200 * cs.sumsqr(self.X[8, 1:].T - self.zmp_z_mid_param)
 
     self.opt.minimize(cost)
 
