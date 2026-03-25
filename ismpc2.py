@@ -65,6 +65,7 @@ class Ismpc:
     self.zmp_z_mid_param = self.opt.parameter(self.N)
 
     self.zmp_x_swing_param = self.opt.parameter(self.N)
+    self.zmp_y_swing_param = self.opt.parameter(self.N)
     self.sigma_param        = self.opt.parameter(self.N)
 
     # -------------------------
@@ -83,7 +84,8 @@ class Ismpc:
 
     zmp_x_total = (1.0 / (1.0 + self.sigma_param)) * self.X[2, 1:].T \
                 + (self.sigma_param / (1.0 + self.sigma_param)) * self.zmp_x_swing_param
-
+    zmp_y_total = (1.0 / (1.0 + self.sigma_param)) * self.X[5, 1:].T \
+            + (self.sigma_param / (1.0 + self.sigma_param)) * self.zmp_y_swing_param
     # -------------------------
     # COST FUNCTION
     #
@@ -103,7 +105,7 @@ class Ismpc:
 
     cost = cs.sumsqr(self.U)
     cost += 200 * cs.sumsqr(zmp_x_total        - self.zmp_x_mid_param)  # two-mass (x)
-    cost += 110 * cs.sumsqr(self.X[5, 1:].T    - self.zmp_y_mid_param)  # pure LIP (y)
+    cost += 200 * cs.sumsqr(zmp_y_total - self.zmp_y_mid_param)
     cost += 200 * cs.sumsqr(self.X[8, 1:].T    - self.zmp_z_mid_param)
 
     self.opt.minimize(cost)
@@ -196,6 +198,7 @@ class Ismpc:
     mc_x, mc_y, mc_z = self.generate_moving_constraint(t)
 
     swing_x = np.zeros(self.N)
+    swing_y = np.zeros(self.N)
     sigma   = np.zeros(self.N)
 
     plan = self.footstep_planner.plan
@@ -223,18 +226,25 @@ class Ismpc:
         # Correct:   liftoff (step_idx-1) → landing (step_idx+1).
         if step_idx == 0:
           swing_start_x = mc_x[0]              # first step: use initial midfoot
+          swing_start_y = mc_y[0]
         else:
           swing_start_x = plan[step_idx - 1]['pos'][0]
-
+          swing_start_y = plan[step_idx - 1]['pos'][1]
         if step_idx + 1 < n:
           swing_end_x = plan[step_idx + 1]['pos'][0]
+          swing_end_y = plan[step_idx + 1]['pos'][1]
         else:
           # last step: mirror step length forward
           swing_end_x = plan[step_idx]['pos'][0] \
                        + (plan[step_idx]['pos'][0] - swing_start_x)
+          swing_end_y = plan[step_idx]['pos'][1] + (plan[step_idx]['pos'][1] - swing_start_y)
 
         step_length = swing_end_x - swing_start_x
+        step_length_y = swing_end_y - swing_start_y
+        Tt = self.params['ss_duration'] * self.delta
+        tau = np.clip(phase_time_s / Tt, 0.0, 1.0)
 
+        swing_y[i] = swing_start_y + tau * step_length_y
         xm, zm, ddzm = self.swing_foot_model(phase_time_s, step_length)
 
         # swing foot ZMP in world frame (= x_m since ẍ_m=0 for linear motion)
@@ -249,6 +259,7 @@ class Ismpc:
       else:
         sigma[i]   = 0.0
         swing_x[i] = mc_x[i]
+        swing_y[i] = mc_y[i]
       
       # sigma regularization, to avoid jump from 0 to anithing removes spikes in plot)
       alpha = self.sigma_fun(
@@ -265,6 +276,7 @@ class Ismpc:
     self.opt.set_value(self.zmp_y_mid_param,   mc_y)
     self.opt.set_value(self.zmp_z_mid_param,   mc_z)
     self.opt.set_value(self.zmp_x_swing_param, swing_x)
+    self.opt.set_value(self.zmp_y_swing_param, swing_y)
     self.opt.set_value(self.sigma_param,       sigma)
 
     # solve
@@ -291,9 +303,14 @@ class Ismpc:
     # Also use sigma[1]/swing_x[1] for time alignment with the next state.
     sigma1   = sigma[0]   if self.N > 1 else sigma[0]
     swing_x1 = swing_x[0] if self.N > 1 else swing_x[0]
+    swing_y1 = swing_y[0]
+    
     zmp_x_pred = (1.0 / (1.0 + sigma1)) * self.x[2] \
                + (sigma1 / (1.0 + sigma1)) * swing_x1 #x_z_tot
-    self.lip_state['zmp']['pos_total'] = np.array([zmp_x_pred, self.x[5], self.x[8]])
+    zmp_y_pred = (1.0 / (1.0 + sigma1)) * self.x[5] \
+           + (sigma1 / (1.0 + sigma1)) * swing_y1
+
+    self.lip_state['zmp']['pos_total'] = np.array([zmp_x_pred, zmp_y_pred, self.x[8]])
 
     contact = self.footstep_planner.get_phase_at_time(t)
 
