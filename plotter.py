@@ -245,9 +245,9 @@ tbl = ax_table.table(
     loc="center",
     cellLoc="center",
 )
-tbl.auto_set_font_size(False)
-tbl.set_fontsize(ANNOT_FS + 0.5)
-tbl.scale(1, 1.55)
+tbl.auto_set_font_size(True)
+tbl.set_fontsize(ANNOT_FS)
+tbl.scale(1, 1.5)
 
 # colour rows by mode, header dark
 for (row, col), cell in tbl.get_celld().items():
@@ -371,10 +371,10 @@ for col_idx, mn in enumerate(mode_names):
 # ── Super-title ───────────────────────────────────────────────────────────────
 fig.suptitle(
     "IS-MPC Two-Mass Model — ZMP Tracking: Predicted vs Measured",
-    fontsize=TITLE_FS + 3, fontweight="bold", color="#0F172A", y=0.99,
+    fontsize=TITLE_FS, fontweight="bold", color="#0F172A", y=0.99,
 )
 
-plt.savefig(OUTPUT_PNG, dpi=300, bbox_inches="tight",
+plt.savefig(OUTPUT_PNG, dpi=1000, bbox_inches="tight",
             facecolor=fig.get_facecolor())
 print(f"Figure saved → {OUTPUT_PNG}")
 plt.show()
