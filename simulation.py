@@ -4,11 +4,14 @@ import copy
 from utils import *
 import os
 
-mode="Two_Mass" #enter here what you are using, use LIP, Two_Mass, Two_Mass_NoY for Y-LIP version
+mode="TM_ZMP"   #enter here what you are using, use LIP, TM for two mass withouth filter and total zmp costraint, 
+                #TM_NoY for Y-LIP version, TM_ZMP for two mass with total ZMP costraint
 if mode=='LIP':
   import ismpc_LIP as ismpc
-elif mode=='Two_Mass':
+elif mode=='TM':
   import ismpc_Best as ismpc
+elif mode=='TM_ZMP':
+  import ismpc_NewZMP as ismpc
 else:
   import ismpc_YLIP as ismpc
 
