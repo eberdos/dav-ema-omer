@@ -1,3 +1,4 @@
+#ismpc_NewZMP
 import numpy as np
 import casadi as cs
 
@@ -137,6 +138,8 @@ class Ismpc:
     # zmp_y constraint
     self.opt.subject_to(zmp_y_total <= self.zmp_y_mid_param + self.foot_size / 2)
     self.opt.subject_to(zmp_y_total >= self.zmp_y_mid_param - self.foot_size / 2)
+    #self.opt.subject_to(self.X[5, 1:].T <= self.zmp_y_mid_param + self.foot_size / 2)
+    #self.opt.subject_to(self.X[5, 1:].T >= self.zmp_y_mid_param - self.foot_size / 2)
 
 
     # -------------------------

@@ -8,12 +8,16 @@ mode="TM_ZMP"   #enter here what you are using, use LIP, TM for two mass without
                 #TM_NoY for Y-LIP version, TM_ZMP for two mass with total ZMP costraint
 if mode=='LIP':
   import ismpc_LIP as ismpc
+  R_zval=1e4
 elif mode=='TM':
   import ismpc_Best as ismpc
+  R_zval=1e2
 elif mode=='TM_ZMP':
   import ismpc_NewZMP as ismpc
+  R_zval=1e2
 else:
   import ismpc_YLIP as ismpc
+  R_zval=1e4
 
 import footstep_planner
 import inverse_dynamics as id
@@ -132,7 +136,7 @@ class Hrp4Controller(dart.gui.osg.WorldNode):
     d[7] = -self.params['world_time_step'] * self.params['g']
     H = np.identity(3)
     Q = block_diag(1., 1., 1.)
-    R = block_diag(1e1, 1e2, 1e4)
+    R = block_diag(1e1, 1e2, R_zval)
     P = np.identity(3)
     x = np.array([
         self.initial['com']['pos'][0], self.initial['com']['vel'][0], self.initial['zmp']['pos'][0],
@@ -338,9 +342,21 @@ if __name__ == "__main__":
     np.save('zmp_meas_lip.npy', np.array(node.logger.log_zmp_measured_raw))
     np.save('zmp_pred_lip.npy', np.array(node.logger.log_zmp_total_predicted))
     node.logger.save_plot(dt=world.getTimeStep(), filename='zmp_lip.png')
-  else:
-    np.save('zmp_meas.npy',         np.array(node.logger.log_zmp_measured_raw))
+  elif mode=='TM_ZMP':
+    np.save('zmp_meas_newzmp.npy',         np.array(node.logger.log_zmp_measured_raw))
+    np.save('zmp_pred_twomass_newzmp.npy', np.array(node.logger.log_zmp_total_predicted))
+    swing_ratio = node.params['swing_mass'] / node.hrp4.getMass()
+    name = f'zmp_{int(swing_ratio * 100)}.png'
+    node.logger.save_plot(dt=world.getTimeStep(), filename=name)
+  elif mode=='TM':
+    np.save('zmp_meas_tm.npy',         np.array(node.logger.log_zmp_measured_raw))
     np.save('zmp_pred_twomass.npy', np.array(node.logger.log_zmp_total_predicted))
+    swing_ratio = node.params['swing_mass'] / node.hrp4.getMass()
+    name = f'zmp_{int(swing_ratio * 100)}.png'
+    node.logger.save_plot(dt=world.getTimeStep(), filename=name)
+  elif mode=='TM_NoY':
+    np.save('zmp_meas_NoY.npy',         np.array(node.logger.log_zmp_measured_raw))
+    np.save('zmp_pred_twomass_NoY.npy', np.array(node.logger.log_zmp_total_predicted))
     swing_ratio = node.params['swing_mass'] / node.hrp4.getMass()
     name = f'zmp_{int(swing_ratio * 100)}.png'
     node.logger.save_plot(dt=world.getTimeStep(), filename=name)

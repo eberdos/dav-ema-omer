@@ -6,7 +6,7 @@ import os
 import ismpc_filtered as ismpc
 import planner_filtered as footstep_planner
 import inverse_dynamics as id
-import filter_filter as filter
+import filter_zTot as filter
 import foot_trajectory_generator as ftg
 from logger import Logger
 
@@ -114,7 +114,7 @@ class Hrp4Controller(dart.gui.osg.WorldNode):
     d[7] = -self.params['world_time_step'] * self.params['g']
     H = np.identity(9)
     Q = block_diag(1., 1., 1.)
-    R = block_diag(1e1, 1e2, 1e4)
+    R = block_diag(1e1, 1e2, 1e2)
     P = np.identity(3)
     x = np.array([
         self.initial['com']['pos'][0], self.initial['com']['vel'][0], self.initial['zmp']['pos'][0],
@@ -318,6 +318,6 @@ if __name__ == "__main__":
     i += 1
 
   print("yahu")
-  np.save('zmp_meas.npy',         np.array(node.logger.log_zmp_measured_raw))
-  np.save('zmp_pred_twomass.npy', np.array(node.logger.log_zmp_total_predicted))
+  np.save('zmp_meas_filt.npy',         np.array(node.logger.log_zmp_measured_raw))
+  np.save('zmp_pred_twomass_filt.npy', np.array(node.logger.log_zmp_total_predicted))
   node.logger.save_plot(dt=world.getTimeStep(), filename='zmp_10.png')
