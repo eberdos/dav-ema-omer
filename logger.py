@@ -29,6 +29,17 @@ class Logger():
   def log_zmp_raw(self, zmp_raw):
     self.log_zmp_measured_raw.append(zmp_raw.copy())
 
+
+  def compute_rmse(self, skip_seconds=2.0, dt=0.01, axis=0):
+    from scipy.signal import medfilt
+    pred = np.array(self.log_zmp_total_predicted)
+    meas = np.array(self.log_zmp_measured_raw)
+    n    = min(len(pred), len(meas))
+    skip = int(skip_seconds / dt)
+    p    = medfilt(pred[:n, axis], kernel_size=15)
+    m    = medfilt(meas[:n, axis], kernel_size=51)
+    return float(np.sqrt(np.mean((p[skip:] - m[skip:])**2)))
+
   def initialize_plot(self, frequency=1):
     self.frequency = frequency
     self.plot_info = [

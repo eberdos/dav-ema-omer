@@ -3,8 +3,9 @@ import dartpy as dart
 import copy
 from utils import *
 import os
+import compare
 
-mode="TM_ZMP"   #enter here what you are using, use LIP, TM for two mass withouth filter and total zmp costraint, 
+mode="TM"   #enter here what you are using, use LIP, TM for two mass withouth filter and total zmp costraint, 
                 #TM_NoY for Y-LIP version, TM_ZMP for two mass with total ZMP costraint
 if mode=='LIP':
   import ismpc_LIP as ismpc
@@ -115,7 +116,17 @@ class Hrp4Controller(dart.gui.osg.WorldNode):
     # initialize modules
     self.id = id.InverseDynamics(self.hrp4, redundant_dofs)
 
-    reference = [(0.2, 0., 0.2)] * 5 + [(0.1, 0., -0.1)] * 10 + [(0.1, 0., 0.)] * 10
+    # reference = [(0.2, 0., 0.2)] * 5 + [(0.1, 0., -0.1)] * 10 + [(0.1, 0., 0.)] * 10
+
+    # For comparison
+    #reference = [(0.1, 0., 0.2)] * 5 + [(0.1, 0., -0.1)] * 10 + [(0.1, 0., 0.)] * 10
+    #reference = [(0.12, 0., 0.2)] * 5 + [(0.12, 0., -0.1)] * 10 + [(0.12, 0., 0.)] * 10
+    #reference = [(0.15, 0., 0.2)] * 5 + [(0.15, 0., -0.1)] * 10 + [(0.15, 0., 0.)] * 10
+    #reference = [(0.18, 0., 0.2)] * 5 + [(0.18, 0., -0.1)] * 10 + [(0.18, 0., 0.)] * 10
+    reference = [(0.2, 0., 0.2)] * 5 + [(0.2, 0., -0.1)] * 10 + [(0.2, 0., 0.)] * 10
+    
+
+
     self.footstep_planner = footstep_planner.FootstepPlanner(
         reference,
         self.initial['lfoot']['pos'],
@@ -360,4 +371,27 @@ if __name__ == "__main__":
     swing_ratio = node.params['swing_mass'] / node.hrp4.getMass()
     name = f'zmp_{int(swing_ratio * 100)}.png'
     node.logger.save_plot(dt=world.getTimeStep(), filename=name)
-    
+
+
+  # ====================== #
+  #    COMPARISON PLOTS    #
+  # ====================== #
+  comparison_mode = True   # ← True per abilitare, False per disabilitare
+
+  if not comparison_mode and not compare.is_empty(mode):
+    compare.reset_data()
+
+  if comparison_mode:
+      dt             = world.getTimeStep()
+      com_log        = np.array(node.logger.log['current', 'com', 'pos'])
+      total_distance = np.linalg.norm(com_log[-1, :2] - com_log[0, :2])
+      total_time     = len(com_log) * dt
+      velocity       = total_distance / total_time
+
+      rmse = node.logger.compute_rmse(dt=dt)
+      n    = compare.collect_data(velocity, rmse, mode)
+
+      if compare.has_enough_data(mode):
+        compare.plot_comparison()
+      else:
+        print(f"[compare] Ancora {compare.MIN_POINTS - n} run per completare il ciclo.")

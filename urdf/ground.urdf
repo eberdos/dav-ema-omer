@@ -11,14 +11,14 @@
             <origin xyz="0 0 0" rpy="0 0 0" />
             <material name="green"><color rgba="0.7 0.7 0.7 1"/></material>
             <geometry>
-                <box size="10 10 1" />
+                <box size="15 15 1" />
                 <color rgba="0.99 0.99 0.7 1"/> 
             </geometry>
         </visual> 
         <collision>
             <origin xyz="0 0 0" rpy="0 0 0" />
             <geometry>
-                <box size="10 10 1" />
+                <box size="15 15 1" />
             </geometry>
         </collision>
     </link>
