@@ -9,9 +9,9 @@ i_start = int(t_start / dt)
 i_end   = int(t_end   / dt)
 
 pred_lip     = np.load('zmp_pred_lip.npy')
-pred_twomass = np.load('zmp_pred_twomass.npy')
+pred_twomass = np.load('zmp_pred_twomass_NoY.npy')
 meas_lip     = np.load('zmp_meas_lip.npy')
-meas_twomass = np.load('zmp_meas.npy')
+meas_twomass = np.load('zmp_meas_NoY.npy')
 
 n = min(len(pred_lip), len(pred_twomass), len(meas_lip), len(meas_twomass))
 t = np.arange(n) * dt

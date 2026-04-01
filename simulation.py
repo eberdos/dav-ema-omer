@@ -3,22 +3,21 @@ import dartpy as dart
 import copy
 from utils import *
 import os
-import compare
 
-mode="TM"   #enter here what you are using, use LIP, TM for two mass withouth filter and total zmp costraint, 
+mode="TM_ZMP"   #enter here what you are using, use LIP, TM for two mass withouth filter and total zmp costraint, 
                 #TM_NoY for Y-LIP version, TM_ZMP for two mass with total ZMP costraint
 if mode=='LIP':
   import ismpc_LIP as ismpc
   R_zval=1e4
 elif mode=='TM':
   import ismpc_Best as ismpc
-  R_zval=1e2
+  R_zval=95
 elif mode=='TM_ZMP':
   import ismpc_NewZMP as ismpc
-  R_zval=1e2
+  R_zval=95
 else:
-  import ismpc_YLIP as ismpc
-  R_zval=1e4
+  import ismpc_NoY as ismpc
+  R_zval=1e2
 
 import footstep_planner
 import inverse_dynamics as id
@@ -116,17 +115,7 @@ class Hrp4Controller(dart.gui.osg.WorldNode):
     # initialize modules
     self.id = id.InverseDynamics(self.hrp4, redundant_dofs)
 
-    # reference = [(0.2, 0., 0.2)] * 5 + [(0.1, 0., -0.1)] * 10 + [(0.1, 0., 0.)] * 10
-
-    # For comparison
-    #reference = [(0.1, 0., 0.2)] * 5 + [(0.1, 0., -0.1)] * 10 + [(0.1, 0., 0.)] * 10
-    #reference = [(0.12, 0., 0.2)] * 5 + [(0.12, 0., -0.1)] * 10 + [(0.12, 0., 0.)] * 10
-    #reference = [(0.15, 0., 0.2)] * 5 + [(0.15, 0., -0.1)] * 10 + [(0.15, 0., 0.)] * 10
-    #reference = [(0.18, 0., 0.2)] * 5 + [(0.18, 0., -0.1)] * 10 + [(0.18, 0., 0.)] * 10
-    reference = [(0.2, 0., 0.2)] * 5 + [(0.2, 0., -0.1)] * 10 + [(0.2, 0., 0.)] * 10
-    
-
-
+    reference = [(0.2, 0., 0.2)] * 5 + [(0.1, 0., -0.1)] * 10 + [(0.1, 0., 0.)] * 10
     self.footstep_planner = footstep_planner.FootstepPlanner(
         reference,
         self.initial['lfoot']['pos'],
@@ -352,46 +341,23 @@ if __name__ == "__main__":
   if mode=="LIP":
     np.save('zmp_meas_lip.npy', np.array(node.logger.log_zmp_measured_raw))
     np.save('zmp_pred_lip.npy', np.array(node.logger.log_zmp_total_predicted))
-    node.logger.save_plot(dt=world.getTimeStep(), filename='zmp_lip.png')
+    node.logger.save_plot(dt=world.getTimeStep(), filename='zmp_lip.pdf')
   elif mode=='TM_ZMP':
     np.save('zmp_meas_newzmp.npy',         np.array(node.logger.log_zmp_measured_raw))
     np.save('zmp_pred_twomass_newzmp.npy', np.array(node.logger.log_zmp_total_predicted))
     swing_ratio = node.params['swing_mass'] / node.hrp4.getMass()
-    name = f'zmp_{int(swing_ratio * 100)}.png'
+    name = f'zmp_{int(swing_ratio * 100)}.pdf'
     node.logger.save_plot(dt=world.getTimeStep(), filename=name)
   elif mode=='TM':
     np.save('zmp_meas_tm.npy',         np.array(node.logger.log_zmp_measured_raw))
     np.save('zmp_pred_twomass.npy', np.array(node.logger.log_zmp_total_predicted))
     swing_ratio = node.params['swing_mass'] / node.hrp4.getMass()
-    name = f'zmp_{int(swing_ratio * 100)}.png'
+    name = f'zmp_{int(swing_ratio * 100)}.pdf'
     node.logger.save_plot(dt=world.getTimeStep(), filename=name)
   elif mode=='TM_NoY':
     np.save('zmp_meas_NoY.npy',         np.array(node.logger.log_zmp_measured_raw))
     np.save('zmp_pred_twomass_NoY.npy', np.array(node.logger.log_zmp_total_predicted))
     swing_ratio = node.params['swing_mass'] / node.hrp4.getMass()
-    name = f'zmp_{int(swing_ratio * 100)}.png'
+    name = f'zmp_{int(swing_ratio * 100)}.pdf'
     node.logger.save_plot(dt=world.getTimeStep(), filename=name)
-
-
-  # ====================== #
-  #    COMPARISON PLOTS    #
-  # ====================== #
-  comparison_mode = True   # ← True per abilitare, False per disabilitare
-
-  if not comparison_mode and not compare.is_empty(mode):
-    compare.reset_data()
-
-  if comparison_mode:
-      dt             = world.getTimeStep()
-      com_log        = np.array(node.logger.log['current', 'com', 'pos'])
-      total_distance = np.linalg.norm(com_log[-1, :2] - com_log[0, :2])
-      total_time     = len(com_log) * dt
-      velocity       = total_distance / total_time
-
-      rmse = node.logger.compute_rmse(dt=dt)
-      n    = compare.collect_data(velocity, rmse, mode)
-
-      if compare.has_enough_data(mode):
-        compare.plot_comparison()
-      else:
-        print(f"[compare] Ancora {compare.MIN_POINTS - n} run per completare il ciclo.")
+    

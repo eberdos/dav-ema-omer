@@ -1,4 +1,4 @@
-#ismpc_Best.py
+#ismpc_onlyfilter
 import numpy as np
 import casadi as cs
 
@@ -121,7 +121,7 @@ class Ismpc:
 
     self.opt.subject_to(self.X[2, 1:].T <= self.zmp_x_mid_param + self.foot_size / 2)
     self.opt.subject_to(self.X[2, 1:].T >= self.zmp_x_mid_param - self.foot_size / 2)
-
+  
     self.opt.subject_to(self.X[5, 1:].T <= self.zmp_y_mid_param + self.foot_size / 2)
     self.opt.subject_to(self.X[5, 1:].T >= self.zmp_y_mid_param - self.foot_size / 2)
 
@@ -254,7 +254,7 @@ class Ismpc:
         # constant sigma for parabolic trajectory
         sigma[i] = np.clip(
             (self.m / self.M) * (ddzm + self.params['g']) / self.params['g'],
-            0, 1.0
+            0.0, 1.0
         )
 
       else:
@@ -343,3 +343,102 @@ class Ismpc:
       mc_y += self.sigma_fun(time_array, ds_start_time, fs_end_time) * (fs_target_pos[1] - fs_current_pos[1])
 
     return mc_x, mc_y, np.zeros(self.N)
+  
+  def get_two_mass_measurement_terms(self, t):
+    #--------------------------------------------------
+    # Returns the terms needed to compute the two-mass correction in the measurement model:
+    # zmp_total_x = (1/(1+sigma)) * x_z,M + (sigma/(1+sigma)) * x_z,swing
+    # zmp_total_y = (1/(1+sigma)) * x_z,M + (sigma/(1+sigma)) * y_z,swing
+    #--------------------------------------------------
+    mc_x, mc_y, _ = self.generate_moving_constraint(t)
+    
+    swing_x = mc_x[0]
+    swing_y = mc_y[0]
+    sigma = 0.0
+
+    plan = self.footstep_planner.plan
+    step_idx = self.footstep_planner.get_step_index_at_time(t)
+
+    if step_idx is None:
+      return sigma,swing_x, swing_y
+    
+    phase = self.footstep_planner.get_phase_at_time(t)
+    fs_start_time = self.footstep_planner.get_start_time(step_idx)
+    ds_start_time = fs_start_time + plan[step_idx]['ss_duration']
+    n = len(plan)
+
+    if phase == 'ss':
+      phase_time_s = (t- fs_start_time) * self.delta
+      
+      if step_idx == 0:
+        swing_start_x = mc_x[0]              
+        swing_start_y = mc_y[0]
+      else:
+        swing_start_x = plan[step_idx - 1]['pos'][0]
+        swing_start_y = plan[step_idx - 1]['pos'][1]
+
+      if step_idx + 1 < n:
+        swing_end_x = plan[step_idx + 1]['pos'][0]
+        swing_end_y = plan[step_idx + 1]['pos'][1]
+      else:
+        swing_end_x = plan[step_idx]['pos'][0] + (plan[step_idx]['pos'][0] - swing_start_x)
+        swing_end_y = plan[step_idx]['pos'][1] + (plan[step_idx]['pos'][1] - swing_start_y)
+      
+      step_lenght_x = swing_end_x - swing_start_x
+      step_length_y = swing_end_y - swing_start_y
+
+      Tt = self.params['ss_duration'] * self.delta
+      tau = np.clip(phase_time_s / Tt, 0.0, 1.0)
+
+      swing_y = swing_start_y + tau * step_length_y
+
+      xm, zm, ddzm = self.swing_foot_model(phase_time_s, step_lenght_x)
+      swing_x = swing_start_x + xm
+
+      sigma = np.clip(
+            (self.m / self.M) * (ddzm + self.params['g']) / self.params['g'],
+            0.0, 1.0
+        )
+      alpha = self.sigma_fun(
+        t,
+        ds_start_time - 10,
+        ds_start_time + 10    
+      )
+      sigma = alpha * sigma
+
+    return sigma, swing_x, swing_y
+  
+  def get_filter_measurement_model(self, t):
+    #--------------------------------------------------
+    # z_meas = H x + c + v
+    # State x = [CoMx, CoMx_dot, ZMPx, CoMy, CoMy_dot, ZMPy, CoMz, CoMz_dot, ZMPz]
+    # Measurement z = [ZMP_total_x, ZMP_total_y, ZMP_total_z]
+    # H maps the state to the measurement, c is the two-mass correction, v
+    #--------------------------------------------------
+    sigma, swing_x, swing_y = self.get_two_mass_measurement_terms(t)
+
+    denom = 1.0 + sigma
+    if abs(denom) < 1e-3:
+      denom = 1e-3 if denom >= 0 else -1e-3
+
+    a = 1.0 / denom
+    b = sigma / denom
+
+    H = np.eye(9)
+    c = np.zeros(9)
+
+    # ZMP_total_x
+    H[2,2] = a
+    c[2]= b * swing_x
+
+    # ZMP_total_y
+    H[5,5] = a
+    c[5] = b * swing_y
+
+    # z unchanged
+    H[8,8] = 1.0
+    c[8] = 0.0
+
+    return H, c
+
+

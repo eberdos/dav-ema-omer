@@ -138,6 +138,9 @@ class Ismpc:
     # zmp_y constraint
     self.opt.subject_to(zmp_y_total <= self.zmp_y_mid_param + self.foot_size / 2)
     self.opt.subject_to(zmp_y_total >= self.zmp_y_mid_param - self.foot_size / 2)
+    #self.opt.subject_to(self.X[5, 1:].T <= self.zmp_y_mid_param + self.foot_size / 2)
+    #self.opt.subject_to(self.X[5, 1:].T >= self.zmp_y_mid_param - self.foot_size / 2)
+
 
     # -------------------------
     # INITIAL CONDITION
@@ -283,8 +286,8 @@ class Ismpc:
       # sigma regularization, to avoid jump from 0 to anithing removes spikes in plot)
       alpha = self.sigma_fun(
       t + i,
-      ds_start_time - 10,
-      ds_start_time + 10    
+      ds_start_time - 12,
+      ds_start_time + 12    
       )
 
       sigma[i]   = alpha * sigma[i]

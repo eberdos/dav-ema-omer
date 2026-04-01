@@ -10,7 +10,7 @@ from pathlib import Path
 DATA_FILE   = 'compare_data.json'
 MIN_POINTS  = 5   # soglia minima per plottare
 
-KEY_MAP = {'LIP': 'LIP', 'TM': 'TM', 'TM_ZMP': 'TM_ZMP'}
+KEY_MAP = {'LIP': 'LIP', 'TM': 'TM', 'TM_ZMP': 'TM_ZMP', 'TM_NoY': 'TM_NoY'}
 
 def _load() -> dict:
     empty = {k: {'vel': [], 'rmse': []} for k in KEY_MAP}
@@ -65,7 +65,7 @@ def is_empty(mode: str = None) -> bool:
     """Ritorna True se non ci sono dati per la modalità (o per entrambe se mode è None)."""
     data = _load()
     if mode is None:
-        return all(len(data[k]['vel']) == 0 for k in ['LIP', 'TM_ZMP','TM'])
+        return all(len(data[k]['vel']) == 0 for k in ['LIP', 'TM_ZMP','TM','TM_NoY'])
     key  = KEY_MAP.get(mode, 'TM')
     return len(data[key]['vel']) == 0
 
@@ -80,7 +80,7 @@ def plot_comparison():
     plt.figure(figsize=(10, 6))
     plotted = 0
 
-    for key, label in [('LIP', 'LIP'), ('TM_ZMP', '2-Mass, filter and total ZMP'),('TM', '2-Mass, No filter, total ZMP')]:
+    for key, label in [('LIP', 'LIP'), ('TM_ZMP', '2-Mass (TM-all)'),('TM', '2-Mass (TM-MPC cost only)'),('TM_NoY','2-Mass (TM on X only)')]:
         d = data[key]
         if len(d['vel']) < MIN_POINTS:
             print(f"[compare] {key}: dati insufficienti ({len(d['vel'])}/{MIN_POINTS}), skip.")
@@ -101,5 +101,5 @@ def plot_comparison():
     plt.legend()
     plt.grid()
     plt.tight_layout()
-    plt.savefig('compare_rmse_vs_vel.png', dpi=150)
+    plt.savefig('compare_rmse_vs_vel.pdf', dpi=300)
     plt.show()

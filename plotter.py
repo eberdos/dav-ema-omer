@@ -29,7 +29,7 @@ import sys
 MODES = {
     "LIP":             {"pred": "zmp_pred_lip.npy",       "meas": "zmp_meas_lip.npy"},
     "Two-mass\n(Best)":{"pred": "zmp_pred_twomass.npy",   "meas": "zmp_meas_tm.npy"},
-    "Two-mass\n(Filter)":{"pred":"zmp_pred_twomass_filt.npy",  "meas": "zmp_meas_filt.npy"},
+    "Two-mass\n(Filter)":{"pred":"zmp_pred_twomass_NoY.npy",  "meas": "zmp_meas_NoY.npy"},
     "Two-mass\n(ZMP-tot)":{"pred":"zmp_pred_twomass_newzmp.npy","meas":"zmp_meas_newzmp.npy"},
 }
 
@@ -75,32 +75,27 @@ def load_mode(pred_path: str, meas_path: str):
     return pred, meas
 
 
-def compute_stats(pred: np.ndarray, meas: np.ndarray, dt: float,
-                  t_start: float, t_end: float,
-                  axis: int = 0) -> dict:
-    """
-    Compute RMSE and MAE between filtered pred and meas on the evaluation window.
+def compute_stats(pred, meas, dt, t_start, t_end, axis=0):
+    n  = min(len(pred), len(meas))
+    i0 = int(t_start / dt)
+    i1 = min(int(t_end / dt), n)
 
-    Parameters
-    ----------
-    pred, meas : (N, 3) arrays, columns = [x, y, z]
-    axis       : 0=x, 1=y
-    """
-    n      = min(len(pred), len(meas))
-    i0     = int(t_start / dt)
-    i1     = min(int(t_end / dt), n)
+    p_raw = pred[:n, axis]
+    m_raw = meas[:n, axis]
 
-    p_raw  = pred[:n, axis]
-    m_raw  = meas[:n, axis]
+    # filtra SOLO la misura (rumore forze contatto), pred rimane grezzo
+    m_filt = medfilt(m_raw, MEDFILT_MEAS)   # kernel dispari, es. 51
 
-    p_filt = medfilt(p_raw, MEDFILT_PRED)
-    m_filt = medfilt(m_raw, MEDFILT_MEAS)
+    # errore su segnale grezzo vs misura smoothed — lag uniforme
+    err  = p_raw[i0:i1] - m_filt[i0:i1]
+    rmse = float(np.sqrt(np.mean(err ** 2)))
+    mae  = float(np.mean(np.abs(err)))
 
-    err    = p_filt[i0:i1] - m_filt[i0:i1]
-    rmse   = float(np.sqrt(np.mean(err ** 2)))
-    mae    = float(np.mean(np.abs(err)))
+    # per il plot visivo, filtra anche pred con stesso kernel (solo estetico)
+    p_plot = medfilt(p_raw, MEDFILT_MEAS)
+
     return {"rmse": rmse, "mae": mae,
-            "pred_filt": p_filt, "meas_filt": m_filt,
+            "pred_filt": p_plot, "meas_filt": m_filt,
             "n": n, "t": np.arange(n) * dt,
             "i0": i0, "i1": i1}
 

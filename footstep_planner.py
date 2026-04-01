@@ -10,7 +10,6 @@ class FootstepPlanner:
         unicycle_theta = (initial_lfoot[2]   + initial_rfoot[2]  ) / 2.
         support_foot   = params['first_swing']
         self.plan = []
-
         for j in range(len(vref)):
             # set step duration
             ss_duration = default_ss_duration

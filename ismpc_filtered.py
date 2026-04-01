@@ -68,6 +68,7 @@ class Ismpc:
     self.zmp_x_swing_param = self.opt.parameter(self.N)
     self.zmp_y_swing_param = self.opt.parameter(self.N)
     self.sigma_param        = self.opt.parameter(self.N)
+    self.sigma_y_param = self.opt.parameter(self.N)
 
     # -------------------------
     # DYNAMICS CONSTRAINTS
@@ -85,8 +86,8 @@ class Ismpc:
 
     zmp_x_total = (1.0 / (1.0 + self.sigma_param)) * self.X[2, 1:].T \
                 + (self.sigma_param / (1.0 + self.sigma_param)) * self.zmp_x_swing_param
-    zmp_y_total = (1.0 / (1.0 + self.sigma_param)) * self.X[5, 1:].T \
-            + (self.sigma_param / (1.0 + self.sigma_param)) * self.zmp_y_swing_param
+    zmp_y_total = (1.0 / (1.0 + self.sigma_y_param)) * self.X[5, 1:].T \
+                + (self.sigma_y_param / (1.0 + self.sigma_y_param)) * self.zmp_y_swing_param
     # -------------------------
     # COST FUNCTION
     #
@@ -270,7 +271,7 @@ class Ismpc:
       )
 
       sigma[i]   = alpha * sigma[i]
-
+      sigma_y = 1.0 * sigma
     # set parameters
     self.opt.set_value(self.x0_param,          self.x)
     self.opt.set_value(self.zmp_x_mid_param,   mc_x)
@@ -279,7 +280,7 @@ class Ismpc:
     self.opt.set_value(self.zmp_x_swing_param, swing_x)
     self.opt.set_value(self.zmp_y_swing_param, swing_y)
     self.opt.set_value(self.sigma_param,       sigma)
-
+    self.opt.set_value(self.sigma_y_param,    sigma_y)
     # solve
     sol = self.opt.solve()
 

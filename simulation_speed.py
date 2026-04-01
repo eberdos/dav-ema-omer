@@ -3,12 +3,31 @@ import dartpy as dart
 import copy
 from utils import *
 import os
-import ismpc_filtered as ismpc
-import planner_filtered as footstep_planner
+import compare
+
+mode="TM_ZMP"   #enter here what you are using, use LIP, TM for two mass withouth filter and total zmp costraint, 
+                #TM_NoY for Y-LIP version, TM_ZMP for two mass with total ZMP costraint
+if mode=='LIP':
+  import ismpc_LIP as ismpc
+  R_zval=1e4
+elif mode=='TM':
+  import ismpc_Best as ismpc
+  R_zval=102
+elif mode=='TM_ZMP':
+  import ismpc_NewZMP as ismpc
+  R_zval=90
+elif mode=='TM_NoY':
+  import ismpc_NoY as ismpc
+  R_zval=1e3
+else:
+  import ismpc_filtered as ismpc
+  R_zval=1e2
+
+import footstep_planner
 import inverse_dynamics as id
-import filter_zTot as filter
+import filter
 import foot_trajectory_generator as ftg
-from logger import Logger
+from logger_dav import Logger
 
 
 class Hrp4Controller(dart.gui.osg.WorldNode):
@@ -33,8 +52,8 @@ class Hrp4Controller(dart.gui.osg.WorldNode):
         'N':               100,
         'dof':             self.hrp4.getNumDofs(),
         # two-mass parameters
-        'body_mass':       self.hrp4.getMass() * 0.8,
-        'swing_mass':      self.hrp4.getMass() * 0.2,
+        'body_mass':       self.hrp4.getMass() * 0.9,
+        'swing_mass':      self.hrp4.getMass() * 0.1,
         'swing_height':    0.02,
         # real time variables
         'footstep_x_adapt': 0.05,
@@ -100,7 +119,17 @@ class Hrp4Controller(dart.gui.osg.WorldNode):
     # initialize modules
     self.id = id.InverseDynamics(self.hrp4, redundant_dofs)
 
-    reference = [(0.2, 0., 0.2)] * 5 + [(0.1, 0., -0.1)] * 10 + [(0.1, 0., 0.)] * 10
+    # reference = [(0.2, 0., 0.2)] * 5 + [(0.1, 0., -0.1)] * 10 + [(0.1, 0., 0.)] * 10
+
+    # For comparison
+    #reference = [(0.1, 0., 0.2)] * 5 + [(0.1, 0., -0.1)] * 10 + [(0.1, 0., 0.)] * 10 #base reference
+    #reference = [(0.12, 0., 0.2)] * 5 + [(0.12, 0., -0.1)] * 10 + [(0.12, 0., 0.)] * 10
+    #reference = [(0.15, 0., 0.2)] * 5 + [(0.15, 0., -0.1)] * 10 + [(0.15, 0., 0.)] * 10
+    reference = [(0.18, 0., 0.2)] * 5 + [(0.18, 0., -0.1)] * 10 + [(0.18, 0., 0.)] * 10
+    #reference = [(0.2, 0., 0.2)] * 5 + [(0.2, 0., -0.1)] * 10 + [(0.2, 0., 0.)] * 10
+    
+
+
     self.footstep_planner = footstep_planner.FootstepPlanner(
         reference,
         self.initial['lfoot']['pos'],
@@ -119,9 +148,9 @@ class Hrp4Controller(dart.gui.osg.WorldNode):
     B = self.params['world_time_step'] * self.mpc.B_lip
     d = np.zeros(9)
     d[7] = -self.params['world_time_step'] * self.params['g']
-    H = np.identity(9)
+    H = np.identity(3)
     Q = block_diag(1., 1., 1.)
-    R = block_diag(1e1, 1e2, 1e2)
+    R = block_diag(1e1, 1e2, R_zval)
     P = np.identity(3)
     x = np.array([
         self.initial['com']['pos'][0], self.initial['com']['vel'][0], self.initial['zmp']['pos'][0],
@@ -132,7 +161,7 @@ class Hrp4Controller(dart.gui.osg.WorldNode):
         block_diag(A, A, A),
         block_diag(B, B, B),
         d,
-        H,
+        block_diag(H, H, H),
         block_diag(Q, Q, Q),
         block_diag(R, R, R),
         block_diag(P, P, P),
@@ -159,13 +188,11 @@ class Hrp4Controller(dart.gui.osg.WorldNode):
         self.desired['zmp']['vel'][2]
     ])
     self.kf.predict(u)
-    z_meas = np.array([
+    x_flt, _ = self.kf.update(np.array([
         self.current['com']['pos'][0], self.current['com']['vel'][0], self.current['zmp']['pos'][0],
         self.current['com']['pos'][1], self.current['com']['vel'][1], self.current['zmp']['pos'][1],
         self.current['com']['pos'][2], self.current['com']['vel'][2], self.current['zmp']['pos'][2]
-    ])
-    H_kf, c_kf = self.mpc.get_filter_measurement_model(self.time)
-    x_flt, _= self.kf.update(z_meas, H=H_kf,c=c_kf)
+    ]))
 
     # aggiorna stato con output Kalman
     self.current['com']['pos'][0] = x_flt[0]
@@ -325,6 +352,55 @@ if __name__ == "__main__":
     i += 1
 
   print("yahu")
-  np.save('zmp_meas_filt.npy',         np.array(node.logger.log_zmp_measured_raw))
-  np.save('zmp_pred_twomass_filt.npy', np.array(node.logger.log_zmp_total_predicted))
-  node.logger.save_plot(dt=world.getTimeStep(), filename='zmp_10.png')
+  if mode=="LIP":
+    np.save('zmp_meas_lip.npy', np.array(node.logger.log_zmp_measured_raw))
+    np.save('zmp_pred_lip.npy', np.array(node.logger.log_zmp_total_predicted))
+    node.logger.save_plot(dt=world.getTimeStep(), filename='zmp_lip.png')
+  elif mode=='TM_ZMP':
+    np.save('zmp_meas_newzmp.npy',         np.array(node.logger.log_zmp_measured_raw))
+    np.save('zmp_pred_twomass_newzmp.npy', np.array(node.logger.log_zmp_total_predicted))
+    swing_ratio = node.params['swing_mass'] / node.hrp4.getMass()
+    name = f'zmp_{int(swing_ratio * 100)}.png'
+    node.logger.save_plot(dt=world.getTimeStep(), filename=name)
+  elif mode=='TM':
+    np.save('zmp_meas_tm.npy',         np.array(node.logger.log_zmp_measured_raw))
+    np.save('zmp_pred_twomass.npy', np.array(node.logger.log_zmp_total_predicted))
+    swing_ratio = node.params['swing_mass'] / node.hrp4.getMass()
+    name = f'zmp_{int(swing_ratio * 100)}.png'
+    node.logger.save_plot(dt=world.getTimeStep(), filename=name)
+  elif mode=='TM_NoY':
+    np.save('zmp_meas_NoY.npy',         np.array(node.logger.log_zmp_measured_raw))
+    np.save('zmp_pred_twomass_NoY.npy', np.array(node.logger.log_zmp_total_predicted))
+    swing_ratio = node.params['swing_mass'] / node.hrp4.getMass()
+    name = f'zmp_{int(swing_ratio * 100)}.png'
+    node.logger.save_plot(dt=world.getTimeStep(), filename=name)
+  else:
+    np.save('zmp_meas_filt.npy',         np.array(node.logger.log_zmp_measured_raw))
+    np.save('zmp_pred_twomass_filt.npy', np.array(node.logger.log_zmp_total_predicted))
+    swing_ratio = node.params['swing_mass'] / node.hrp4.getMass()
+    name = f'zmp_{int(swing_ratio * 100)}.png'
+    node.logger.save_plot(dt=world.getTimeStep(), filename=name)
+
+
+  # ====================== #
+  #    COMPARISON PLOTS    #
+  # ====================== #
+  comparison_mode = True   # ← True per abilitare, False per disabilitare
+
+  if not comparison_mode and not compare.is_empty(mode):
+    compare.reset_data()
+
+  if comparison_mode:
+      dt             = world.getTimeStep()
+      com_log        = np.array(node.logger.log['current', 'com', 'pos'])
+      total_distance = np.linalg.norm(com_log[-1, :2] - com_log[0, :2])
+      total_time     = len(com_log) * dt
+      velocity       = total_distance / total_time
+
+      rmse = node.logger.compute_rmse(dt=dt)
+      n    = compare.collect_data(velocity, rmse, mode)
+
+      if compare.has_enough_data(mode):
+        compare.plot_comparison()
+      else:
+        print(f"[compare] Ancora {compare.MIN_POINTS - n} run per completare il ciclo.")
